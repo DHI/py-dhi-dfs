@@ -117,22 +117,12 @@ class _GeometryFMLayered(_GeometryFM):
         if n_layers == 1 and node_layers == "all":
             node_layers = "bottom"
 
-        # extract information for selected elements
-        if n_layers == 1:
-            elem2d = self.elem2d_ids[sorted_elements]
-            geom2d = self.geometry2d
-            node_ids, elem_tbl = geom2d._get_nodes_and_table_for_elements(elem2d)
-            assert len(elem_tbl[0]) <= 4, "Not a 2D element"
-            node_coords = geom2d.node_coordinates[node_ids]
-            codes = geom2d.codes[node_ids]
-            elem_ids = self._element_ids[elem2d]
-        else:
-            node_ids, elem_tbl = self._get_nodes_and_table_for_elements(
-                sorted_elements, node_layers=node_layers
-            )
-            node_coords = self.node_coordinates[node_ids]
-            codes = self.codes[node_ids]
-            elem_ids = self._element_ids[sorted_elements]
+        node_ids, elem_tbl = self._get_nodes_and_table_for_elements(
+            sorted_elements, node_layers=node_layers
+        )
+        node_coords = self.node_coordinates[node_ids]
+        codes = self.codes[node_ids]
+        elem_ids = self._element_ids[sorted_elements]
 
         if new_type == DfsuFileType.Dfsu2D:
             return GeometryFM2D(
@@ -256,6 +246,7 @@ class _GeometryFMLayered(_GeometryFM):
             reindex=True,
         )
 
+        # TODO move this to before creating the geometry
         # Fix z-coordinate for sigma-z:
         if self._type == DfsuFileType.Dfsu3DSigmaZ:
             zn = geom.node_coordinates[:, 2].copy()

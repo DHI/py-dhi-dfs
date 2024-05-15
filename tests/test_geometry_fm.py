@@ -6,20 +6,20 @@ from mikeio.spatial import GeometryPoint2D
 
 @pytest.fixture
 def simple_3d_geom():
-    #     x     y    z
-    nc = [
-        (0.0, 0.0, 0.0),
-        (1.0, 0.0, 0.0),
-        (1.0, 1.0, 0.0),
-        (0.0, 0.0, -1.0),
-        (1.0, 0.0, -1.0),
-        (1.0, 1.0, -1.0),
-        (0.0, 0.0, -2.0),
-        (1.0, 0.0, -2.0),
-        (1.0, 1.0, -2.0),
-    ]
 
-    el = [(0, 1, 2, 3, 4, 5), (3, 4, 5, 6, 7, 8)]
+    nc_2d = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]
+    # bottom first approach
+    z = [-2.0, -1.0, 0.0]
+
+    nc = []
+
+    for col in nc_2d:
+        for depth in z:
+            nc.append((col[0], col[1], depth))
+
+    # TODO constructing a 3d mesh following the convention needs a helper function
+    # Arbitrary 3d element tables doesn't work
+    el = [(0, 3, 6, 1, 4, 7), (1, 4, 7, 2, 5, 8)]
 
     g = GeometryFM3D(
         node_coordinates=nc,
@@ -183,7 +183,7 @@ def test_plot_mesh():
     g.plot.mesh()
 
 
-def test_layered(simple_3d_geom: GeometryFM3D):
+def test_layered(simple_3d_geom: GeometryFM3D) -> None:
 
     g = simple_3d_geom
 
@@ -203,3 +203,21 @@ def test_layered(simple_3d_geom: GeometryFM3D):
 
     assert "elements: 2" in repr(g2)
     assert "layers: 2" in repr(g2)
+
+
+def test_select_single_layer_preserved_vertical_coordinates(
+    simple_3d_geom: GeometryFM3D,
+) -> None:
+    g = simple_3d_geom
+
+    bot_el = g.bottom_elements
+    gb = g.elements_to_geometry(bot_el, keepdims=True)
+    assert isinstance(gb, GeometryFM2D)
+    assert gb.node_coordinates[0][2] == -2.0
+
+    top_el = g.top_elements
+
+    gt = g.elements_to_geometry(top_el, keepdims=True)
+    assert isinstance(gt, GeometryFM2D)
+    assert gt.n_elements == 1
+    assert gt.node_coordinates[0][2] == -1.0
