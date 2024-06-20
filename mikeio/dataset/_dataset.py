@@ -1839,7 +1839,8 @@ class Dataset:
                 raise ValueError("Cannot write Dataset with no geometry to file!")
         elif isinstance(self.geometry, Grid2D):
             self._validate_extension(filename, ".dfs2")
-            self._to_dfs2(filename)
+            custom_blocks = kwargs.get("custom_blocks", None)
+            self._to_dfs2(filename, custom_blocks=custom_blocks)
         elif isinstance(self.geometry, Grid3D):
             self._validate_extension(filename, ".dfs3")
             self._to_dfs3(filename)
@@ -1869,11 +1870,15 @@ class Dataset:
 
         _write_dfs0(filename, self, dtype=dtype)
 
-    def _to_dfs2(self, filename: str | Path) -> None:
+    def _to_dfs2(
+        self,
+        filename: str | Path,
+        custom_blocks: Mapping[str, np.ndarray] | None = None,
+    ) -> None:
         # assumes Grid2D geometry
         from ..dfs._dfs2 import write_dfs2
 
-        write_dfs2(filename, self)
+        write_dfs2(filename, self, custom_blocks=custom_blocks)
 
     def _to_dfs3(self, filename: str | Path) -> None:
         # assumes Grid3D geometry

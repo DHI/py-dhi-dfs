@@ -825,6 +825,18 @@ def test_read_dfs2_static_dt_zero():
     assert "time" not in ds2.dims
 
 
+
+def test_add_custom_block_to_dfs2(tmp_path):
+    ds = mikeio.read("tests/testdata/gebco_sound.dfs2")
+    fp = tmp_path / "gebco_sound_with_custom_block.dfs2"
+    ds.to_dfs(
+        fp,
+        custom_blocks={"M21_Misc": np.array([327, 0.2, -900, 10, 0, 0, 0], np.float32)},
+    )
+
+    ds2 = mikeio.open(fp)
+    assert ds2._dfs.FileInfo.CustomBlocks[0].Name == "M21_Misc"
+
 def test_write_read_local_coordinates(tmp_path):
     da = mikeio.DataArray(
         np.array([[1, 2, 3], [4, 5, 6]]),
@@ -864,3 +876,4 @@ def test_to_xarray():
     xr_da = da.to_xarray()
     assert xr_da.x[0] == pytest.approx(0.25)
     assert xr_da.y[0] == pytest.approx(0.25)
+   

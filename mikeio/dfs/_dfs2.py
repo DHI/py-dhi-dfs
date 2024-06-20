@@ -1,7 +1,7 @@
 from __future__ import annotations
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, List, Literal, Tuple
+from typing import Any, List, Literal, Mapping, Tuple
 from collections.abc import Sequence
 
 import numpy as np
@@ -27,14 +27,42 @@ from ..eum import TimeStepUnit
 from ..spatial import Grid2D
 
 
-def write_dfs2(filename: str | Path, ds: Dataset, title: str = "") -> None:
-    dfs = _write_dfs2_header(filename, ds, title)
+def write_dfs2(
+    filename: str | Path,
+    ds: Dataset,
+    title: str = "",
+    custom_blocks: Mapping[str, np.ndarray] | None = None,
+) -> None:
+    """Write a dfs2 file
+
+    Parameters
+    ----------
+    filename: str or Path
+        File name to write
+    ds: Dataset
+        The dataset to write
+    title: str, optional
+        Title of the file
+    custom_blocks: dict, optional
+        Custom blocks to add to the file
+    """
+
+    dfs = _write_dfs2_header(filename, ds, title, custom_blocks=custom_blocks)
     write_dfs_data(dfs=dfs, ds=ds, n_spatial_dims=2)
 
 
-def _write_dfs2_header(filename: str | Path, ds: Dataset, title: str = "") -> DfsFile:
+def _write_dfs2_header(
+    filename: str | Path,
+    ds: Dataset,
+    title: str = "",
+    custom_blocks: Mapping[str, np.ndarray] | None = None,
+) -> DfsFile:
     builder = DfsBuilder.Create(title, "mikeio", __dfs_version__)
     builder.SetDataType(0)
+    if custom_blocks is not None:
+        factory = DfsFactory()
+        for key, value in custom_blocks.items():
+            builder.AddCustomBlock(factory.CreateCustomBlock(key, value))
 
     geometry: Grid2D = ds.geometry
 
