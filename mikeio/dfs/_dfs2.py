@@ -127,6 +127,18 @@ class Dfs2(_Dfs123):
 
         origin, orientation = self._origin_and_orientation_in_CRS()
 
+        bathy_data = None
+        bathy = dfs.ReadStaticItem(1)
+        # TODO validate that this is a bathymetry item
+        # TODO should we do the same with Topography?
+        if bathy is not None and bathy.Name == "Bathymetry":
+            assert bathy.ElementCount == dfs.SpatialAxis.YCount * dfs.SpatialAxis.XCount
+            bathy_data = bathy.Data.reshape(
+                dfs.SpatialAxis.YCount, dfs.SpatialAxis.XCount
+            )
+        else:
+            bathy_data = None
+
         self._geometry = Grid2D(
             dx=dfs.SpatialAxis.Dx,
             dy=dfs.SpatialAxis.Dy,
@@ -139,6 +151,7 @@ class Dfs2(_Dfs123):
             origin=origin,
             is_spectral=is_spectral,
             is_vertical=is_vertical,
+            bathymetry=bathy_data,
         )
         dfs.Close()
         self._validate_no_orientation_in_geo()
