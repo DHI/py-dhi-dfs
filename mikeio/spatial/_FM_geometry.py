@@ -236,7 +236,7 @@ class _GeometryFM(_Geometry):
         reindex: bool = False,
     ) -> None:
         super().__init__(projection=projection)
-        self.node_coordinates = np.asarray(node_coordinates)
+        self._node_coordinates = np.asarray(node_coordinates)
 
         n_nodes = len(node_coordinates)
         self._codes = (
@@ -352,6 +352,20 @@ class _GeometryFM(_Geometry):
     def n_elements(self) -> int:
         """Number of elements"""
         return len(self._element_ids)
+
+    @property
+    def node_coordinates(self) -> np.ndarray:
+        return self._node_coordinates
+
+    @node_coordinates.setter
+    def node_coordinates(self, v: np.ndarray) -> None:
+        self._node_coordinates = v
+        del self.element_coordinates
+
+    @cached_property
+    def element_coordinates(self) -> np.ndarray:
+        """Center coordinates of each element"""
+        return self._calc_element_coordinates()
 
     @property
     def element_ids(self) -> np.ndarray:
@@ -501,11 +515,6 @@ class GeometryFM2D(_GeometryFM):
     def is_tri_only(self) -> bool:
         """Does the mesh consist of triangles only?"""
         return self.max_nodes_per_element == 3 or self.max_nodes_per_element == 6
-
-    @cached_property
-    def element_coordinates(self) -> np.ndarray:
-        """Center coordinates of each element"""
-        return self._calc_element_coordinates()
 
     @cached_property
     def _tree2d(self) -> cKDTree:

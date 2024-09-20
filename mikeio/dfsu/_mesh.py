@@ -88,6 +88,10 @@ class Mesh:
         """Coordinates of nodes"""
         return self.geometry.node_coordinates
 
+    @node_coordinates.setter
+    def node_coordinates(self, v: np.ndarray) -> None:
+        self.geometry.node_coordinates = v
+
     @property
     def n_nodes(self) -> int:
         """Number of nodes"""
