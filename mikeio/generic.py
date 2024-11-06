@@ -526,8 +526,8 @@ def concat(
                         darray = d.astype(np.float32)
 
                         dfs_o.WriteItemTimeStepNext(0, darray)
-                end_time = (
-                    start_time + timedelta(seconds=timestep * dt)
+                end_time = start_time + timedelta(
+                    seconds=timestep * dt
                 )  # reuse last timestep since there is no EndDateTime attribute in t_axis.
                 dfs_i.Close()
 
@@ -550,6 +550,82 @@ def concat(
                 end_time = start_time + timedelta(
                     seconds=timestep * dt
                 )  # get end time from current file
+                dfs_i.Close()
+
+        if keep == "average":
+            if i == 0:
+                # For first file, write all timesteps normally
+                for timestep in range(n_time_steps):
+                    current_time = start_time + timedelta(seconds=timestep * dt)
+
+                    for item in range(n_items):
+                        itemdata = dfs_i.ReadItemTimeStep(int(item + 1), int(timestep))
+                        darray = itemdata.Data.astype(np.float32)
+                        dfs_o.WriteItemTimeStepNext(0, darray)
+                end_time = start_time + timedelta(seconds=(n_time_steps - 1) * dt)
+                first_start_time = start_time  # Store the start time of first file
+                dfs_i.Close()
+            else:
+                # For subsequent files, we need to handle overlapping periods
+                # Calculate overlap in timesteps
+                if start_time <= end_time:
+
+                    overlap_end = int((end_time - start_time).total_seconds() / dt) + 1
+
+                    # Read current file data
+                    for timestep in range(n_time_steps):
+                        current_time = start_time + timedelta(seconds=timestep * dt)
+
+                        for item in range(n_items):
+                            itemdata = dfs_i.ReadItemTimeStep(
+                                int(item + 1), int(timestep)
+                            )
+                            current_data = itemdata.Data.astype(np.float32)
+
+                            if (
+                                int(timestep) <= overlap_end
+                            ):  # Convert back to int for comparison
+                                # In overlapping period
+                                existing_pos = int(
+                                    (current_time - first_start_time).total_seconds()
+                                    / dt
+                                    - 1
+                                )
+                                if existing_pos >= 0:
+                                    # Read existing data
+                                    dfs_o.Flush()
+                                    temp_dfs = DfsFileFactory.DfsGenericOpen(
+                                        str(outfilename)
+                                    )
+                                    existing_data = temp_dfs.ReadItemTimeStep(
+                                        int(item + 1), int(existing_pos)
+                                    ).Data
+                                    temp_dfs.Close()
+
+                                    # Calculate average
+                                    averaged_data = (existing_data + current_data) / 2
+                                    # Write averaged data
+                                    # dfs_o.WriteItemTimeStep(
+                                    #     item + 1, existing_pos, 0, averaged_data
+                                    # ) # This is what we need, but it does not wo
+                                    dfs_o.WriteItemTimeStepNext(0, averaged_data)
+
+                            else:
+                                # After overlap period - write new data
+                                dfs_o.WriteItemTimeStepNext(0, current_data)
+
+                else:
+                    # No overlap - write all timesteps
+                    for timestep in range(n_time_steps):
+                        current_time = start_time + timedelta(seconds=timestep * dt)
+                        for item in range(n_items):
+                            itemdata = dfs_i.ReadItemTimeStep(
+                                str(item + 1), str(timestep)
+                            )
+                            darray = itemdata.Data.astype(np.float32)
+                            dfs_o.WriteItemTimeStepNext(0, darray)
+
+                end_time = start_time + timedelta(seconds=(n_time_steps - 1) * dt)
                 dfs_i.Close()
 
     dfs_o.Close()

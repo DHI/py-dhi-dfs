@@ -4,6 +4,7 @@
 # MIKE IO: input/output of MIKE files in Python
  ![Python version](https://img.shields.io/pypi/pyversions/mikeio.svg)
 [![PyPI version](https://badge.fury.io/py/mikeio.svg)](https://badge.fury.io/py/mikeio)
+[![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://github.com/DHI/mikeio/blob/main/License.txt)
 
 Read, write and manipulate dfs0, dfs1, dfs2, dfs3, dfsu and mesh files. 
 

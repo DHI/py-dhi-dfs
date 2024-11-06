@@ -235,6 +235,17 @@ def test_concat_overlapping(tmp_path):
     assert len(ds.time) == 145
 
 
+def test_concat_average(tmp_path):
+    infilename_a = "generic_concat_file1.dfs2"
+    infilename_b = "generic_concat_file2.dfs2"
+    fp = tmp_path / "concat.dfs1"
+
+    mikeio.generic.concat([infilename_a, infilename_b], fp, keep="average")
+
+    ds = mikeio.read(fp)
+    assert ds[0][2].values[0][0] == 51.5
+
+
 def test_concat_files_gap_fail(tmp_path):
     infilename_a = "tests/testdata/tide1.dfs1"
     infilename_b = "tests/testdata/tide4.dfs1"
