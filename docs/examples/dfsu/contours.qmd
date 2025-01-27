@@ -1,0 +1,67 @@
+---
+title: Dfsu - Contour lines
+jupyter: python3
+description: Export contour lines to GIS compatible format, GeoJSON.
+---
+
+```{python}
+import numpy as np
+from scipy.interpolate import griddata
+import matplotlib.pyplot as plt
+import mikeio
+import json
+```
+
+```{python}
+ds = mikeio.read("../../data/wind_north_sea.dfsu")
+ws = ds["Wind speed"][0]
+ws.plot();
+```
+
+```{python}
+# get coordinates
+ec = ds.geometry.element_coordinates
+lon = ec[:,0]
+lat = ec[:,1]
+```
+
+```{python}
+m = ds.Wind_speed[0].to_numpy()
+```
+
+```{python}
+# Interpolate to cartesian grid
+numcols, numrows = 200, 200
+xi = np.linspace(lon.min(), lon.max(), numcols)
+yi = np.linspace(lat.min(), lat.max(), numrows)
+xi, yi = np.meshgrid(xi, yi)
+
+grid_z = griddata(points=ec[:, 0:2], values=m, xi=(xi, yi), method="cubic")
+```
+
+```{python}
+contour_levels = np.arange(4, 14, 0.5)
+contour = plt.contour(xi, yi, grid_z, levels=contour_levels)
+```
+
+Using the [`geojson`](https://pypi.org/project/geojson/) library.
+
+```{python}
+from geojson import Feature, FeatureCollection, LineString
+
+features = []
+for level, paths in zip(contour.levels, contour.allsegs):
+    for path in paths:
+        features.append(
+            Feature(geometry=LineString(path.tolist()), properties={"value": level})
+        )
+
+# TODO clip to domain
+```
+
+```{python}
+geojson_data = FeatureCollection(features)
+
+with open("contours.geojson", "w") as f:
+    json.dump(geojson_data, f)
+```

@@ -60,6 +60,7 @@ dev = [
     "quartodoc==0.9.1",
     "shapely",
     "pyproj",
+    "geojson",
     "xarray",
     "netcdf4",
     "rasterio",
