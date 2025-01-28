@@ -3,17 +3,17 @@ from functools import cached_property
 from pathlib import Path
 
 from typing import Any, Iterable, Literal, Sequence
-import warnings
 
 from matplotlib.axes import Axes
 import numpy as np
 from mikecore.DfsuFile import DfsuFileType
+from shapely import Polygon
 
 
 from ._FM_geometry import GeometryFM2D, _GeometryFM, _GeometryFMPlotter
 from ._geometry import GeometryPoint3D
 
-from ._FM_utils import _plot_vertical_profile, BoundaryPolygons
+from ._FM_utils import _plot_vertical_profile
 
 from ._utils import _relative_cumulative_distance
 
@@ -654,15 +654,8 @@ class GeometryFM3D(_GeometryFMLayered):
         self.plot = _GeometryFMPlotter(self)
 
     @property
-    def boundary_polylines(self) -> BoundaryPolygons:
-        warnings.warn(
-            "boundary_polylines is renamed to boundary_polygons", FutureWarning
-        )
-        return self.geometry2d.boundary_polylines
-
-    @property
-    def boundary_polygons(self) -> BoundaryPolygons:
-        return self.geometry2d.boundary_polylines
+    def boundary_polygon(self) -> Polygon:
+        return self.geometry2d.boundary_polygon
 
     def contains(self, points: np.ndarray) -> np.ndarray:
         return self.geometry2d.contains(points)

@@ -128,6 +128,9 @@ class GeometryPoint2D(_Geometry):
         """Geometry dimension."""
         return 0
 
+    def __len__(self) -> int:
+        return 1
+
     def to_shapely(self) -> Any:
         from shapely.geometry import Point
 
@@ -156,6 +159,9 @@ class GeometryPoint3D(_Geometry):
     @property
     def ndim(self) -> int:
         return 0
+
+    def __len__(self) -> int:
+        return 1
 
     def to_shapely(self) -> Any:
         from shapely.geometry import Point

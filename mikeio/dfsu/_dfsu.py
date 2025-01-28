@@ -315,7 +315,7 @@ class Dfsu2DH:
         return str.join("\n", out)
 
     @property
-    def geometry(self) -> Any:
+    def geometry(self) -> GeometryFM2D:
         return self._geometry
 
     @property
@@ -399,8 +399,8 @@ class Dfsu2DH:
         time: int | str | slice | None = None,
         elements: Sequence[int] | np.ndarray | None = None,
         area: tuple[float, float, float, float] | None = None,
-        x: float | Sequence[float] | None = None,
-        y: float | Sequence[float] | None = None,
+        x: float | Sequence[float] | np.ndarray | None = None,
+        y: float | Sequence[float] | np.ndarray | None = None,
         keepdims: bool = False,
         dtype: Any = np.float32,
         error_bad_data: bool = True,
@@ -453,13 +453,13 @@ class Dfsu2DH:
         if (x is not None) or (y is not None):
             elements = self.geometry.find_index(x=x, y=y)
 
-        if elements is None:
-            geometry = self.geometry
-            n_elems = geometry.n_elements
-        else:
+        if elements is not None:
             elements = [elements] if np.isscalar(elements) else list(elements)  # type: ignore
-            n_elems = len(elements)
             geometry = self.geometry.elements_to_geometry(elements)
+        else:
+            geometry = self.geometry
+
+        n_elems = len(geometry)
 
         item_numbers = _valid_item_numbers(dfs.ItemInfo, items)
         n_items = len(item_numbers)

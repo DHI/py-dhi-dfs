@@ -1,7 +1,5 @@
-from dataclasses import dataclass
 from typing import Any, Literal, Sequence
 
-from numpy.typing import NDArray
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.collections import PatchCollection
@@ -10,6 +8,7 @@ from matplotlib.figure import Figure
 from matplotlib.tri import Triangulation
 import numpy as np
 from scipy.sparse import csr_matrix
+from shapely import Polygon
 
 from ._utils import _relative_cumulative_distance
 
@@ -18,65 +17,11 @@ MESH_COL = "0.95"
 MESH_COL_DARK = "0.6"
 
 
-@dataclass
-class Polygon:
-    xy: NDArray
-
-    @property
-    def area(self) -> float:
-        return (
-            np.dot(self.xy[:, 1], np.roll(self.xy[:, 0], 1))
-            - np.dot(self.xy[:, 0], np.roll(self.xy[:, 1], 1))
-        ) * 0.5
-
-
-@dataclass
-class BoundaryPolygons:
-    exteriors: list[Polygon]
-    interiors: list[Polygon]
-
-    @property
-    def lines(self) -> list[Polygon]:
-        return self.exteriors + self.interiors
-
-    def contains(self, points: np.ndarray) -> np.ndarray:
-        """Test if a list of points are contained by mesh.
-
-        Parameters
-        ----------
-        points : array-like n-by-2
-            x,y-coordinates of n points to be tested
-
-        Returns
-        -------
-        bool array
-            True for points inside, False otherwise
-
-        """
-        import matplotlib.path as mp  # type: ignore
-
-        exterior = self.exteriors[0]
-        cnts = mp.Path(exterior.xy).contains_points(points)
-
-        if len(self.exteriors) > 1:
-            # in case of several dis-joint outer domains
-            for exterior in self.exteriors[1:]:
-                in_domain = mp.Path(exterior.xy).contains_points(points)
-                cnts = np.logical_or(cnts, in_domain)
-
-        # subtract any holes
-        for interior in self.interiors:
-            in_hole = mp.Path(interior.xy).contains_points(points)
-            cnts = np.logical_and(cnts, ~in_hole)
-
-        return cnts
-
-
 def _plot_map(
     node_coordinates: np.ndarray,
     element_table: np.ndarray,
     element_coordinates: np.ndarray,
-    boundary_polylines: list[Polygon],
+    boundary_polygon: Polygon,
     projection: str = "",
     z: np.ndarray | None = None,
     plot_type: Literal[
@@ -95,68 +40,6 @@ def _plot_map(
     ax: Axes | None = None,
     add_colorbar: bool = True,
 ) -> Axes:
-    """Plot unstructured data and/or mesh, mesh outline.
-
-    Parameters
-    ----------
-    node_coordinates: np.array
-        node coordinates
-    element_table: np.array
-        element table
-    element_coordinates: np.array
-        element coordinates
-    boundary_polylines: BoundaryPolylines,
-        boundary polylines
-    projection: str, optional
-        projection type, default: ""
-    z: np.array or a Dataset with a single item, optional
-        value for each element to plot, default bathymetry
-    plot_type: str, optional
-        type of plot: 'patch' (default), 'mesh_only', 'shaded',
-        'contour', 'contourf' or 'outline_only'
-    title: str, optional
-        axes title
-    label: str, optional
-        colorbar label (or title if contour plot)
-    cmap: matplotlib.cm.cmap, optional
-        colormap, default viridis
-    vmin: real, optional
-        lower bound of values to be shown on plot, default:None
-    vmax: real, optional
-        upper bound of values to be shown on plot, default:None
-    levels: int, list(float), optional
-        for contour plots: how many levels, default:10
-        or a list of discrete levels e.g. [3.0, 4.5, 6.0]
-    show_mesh: bool, optional
-        should the mesh be shown on the plot? default=True
-    show_outline: bool, optional
-        should domain outline be shown on the plot? default=True
-    n_refinements: int, optional
-        for 'shaded' and 'contour' plots (and if show_mesh=False)
-        do this number of mesh refinements for smoother plotting
-    figsize: (float, float), optional
-        specify size of figure
-    ax: matplotlib.axes, optional
-        Adding to existing axis, instead of creating new fig
-    add_colorbar: bool
-        Add colorbar to plot, default True
-
-    Returns
-    -------
-    <matplotlib.axes>
-
-    Examples
-    --------
-    >>> dfs = Dfsu("HD2D.dfsu")
-    >>> dfs.plot() # bathymetry
-    >>> ds = dfs.read(items="Surface elevation", time=0)
-    >>> ds.shape
-    (1, 884)
-    >>> ds.n_items
-    1
-    >>> dfs.plot(z=ds) # plot surface elevation
-
-    """
     import matplotlib.pyplot as plt
     import matplotlib
 
@@ -193,7 +76,7 @@ def _plot_map(
     _set_xy_label_by_projection(ax, projection)
 
     if plot_type == "outline_only":
-        __plot_outline_only(ax, boundary_polylines)
+        __plot_outline_only(ax, boundary_polygon)
         return ax
 
     if plot_type == "mesh_only":
@@ -271,7 +154,7 @@ def _plot_map(
             __add_non_tri_mesh(ax, nc, element_table, plot_type)
 
     if show_outline:
-        __add_outline(ax, boundary_polylines)
+        __add_outline(ax, boundary_polygon)
 
     if add_colorbar:
         __add_colorbar(ax, cmap_ScMappable, fig_obj, label, levels, cbar_extend)
@@ -397,15 +280,15 @@ def __plot_mesh_only(ax: Axes, nc: np.ndarray, element_table: np.ndarray) -> Non
     ax.add_collection(fig_obj)
 
 
-def __plot_outline_only(ax: Axes, boundary_polylines: list[Polygon]) -> Axes:
+def __plot_outline_only(ax: Axes, boundary_polygons: list[Polygon]) -> Axes:
     """plot outline only (no data).
 
     Parameters
     ----------
     ax : matplotlib.axes.Axes
         axes object
-    boundary_polylines : list[PolyLine]
-        boundary polylines
+    boundary_polygons : list[Polygon]
+        boundary polygons
 
     Returns
     -------
@@ -413,7 +296,7 @@ def __plot_outline_only(ax: Axes, boundary_polylines: list[Polygon]) -> Axes:
         axes object
 
     """
-    __add_outline(ax, boundary_polylines)
+    __add_outline(ax, boundary_polygons)
     return ax
 
 
@@ -633,23 +516,8 @@ def __add_non_tri_mesh(
     ax.add_collection(p)
 
 
-def __add_outline(ax: Axes, boundary_polylines: list[Polygon]) -> None:
-    """add outline to axes.
-
-    Parameters
-    ----------
-    ax : matplotlib.axes.Axes
-        axes object
-    boundary_polylines: list[PolyLine]
-        boundary polylines
-
-    Returns
-    -------
-    None
-
-    """
-    for line in boundary_polylines:
-        ax.plot(*line.xy.T, color="0.4", linewidth=1.2)
+def __add_outline(ax: Axes, boundary_polygons: Polygon) -> None:
+    ax.plot(*np.array(boundary_polygons.exterior.coords).T, color="0.4", linewidth=1.2)
 
 
 def _set_xy_label_by_projection(ax: Axes, projection: str) -> None:

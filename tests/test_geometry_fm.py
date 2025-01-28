@@ -1,4 +1,5 @@
 import pytest
+import mikeio
 from mikeio.spatial import GeometryFM2D, GeometryFM3D
 from mikeio.exceptions import OutsideModelDomainError
 from mikeio.spatial import GeometryPoint2D
@@ -217,7 +218,6 @@ def test_plot_mesh():
 
 
 def test_layered(simple_3d_geom: GeometryFM3D):
-
     g = simple_3d_geom
 
     assert g.n_elements == 2
@@ -236,6 +236,36 @@ def test_layered(simple_3d_geom: GeometryFM3D):
 
     assert "elements: 2" in repr(g2)
     assert "layers: 2" in repr(g2)
+
+
+def test_contains_complex_geometry():
+    msh = mikeio.open("tests/testdata/gulf.mesh")
+
+    points = [
+        [300_000, 3_200_000],
+        [400_000, 3_000_000],
+        [800_000, 2_750_000],
+        [1_200_000, 2_700_000],
+    ]
+
+    res = msh.geometry.contains(points)
+
+    assert all(res)
+
+    res2 = msh.geometry.contains(points, strategy="shapely")
+    assert all(res2)
+
+
+def test_find_index_in_highres_quad_area():
+    dfs = mikeio.open("tests/testdata/coastal_quad.dfsu")
+
+    pts = [(439166.047, 6921703.975), (439297.166, 6921728.645)]
+
+    idx = dfs.geometry.find_index(coords=pts)
+
+    assert len(idx) == 2
+    for i in idx:
+        assert i >= 0
 
 
 def test_equality():
@@ -277,3 +307,9 @@ def test_equality_shifted_coords():
 
     g2 = GeometryFM2D(node_coordinates=nc2, element_table=el, projection="LONG/LAT")
     assert g != g2
+
+
+def test_da_boundary_polygon() -> None:
+    dfs = mikeio.Dfsu2DH("tests/testdata/FakeLake.dfsu")
+    bnd = dfs.geometry.boundary_polygon
+    assert len(bnd.interiors) == 1

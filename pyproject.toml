@@ -30,6 +30,7 @@ dependencies = [
     "PyYAML",
     "tqdm",
     "xarray",
+    "shapely>=2.0",
 ]
 
 authors = [

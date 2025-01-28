@@ -8,7 +8,6 @@ from typing import (
     Sized,
     TYPE_CHECKING,
 )
-import warnings
 
 
 import numpy as np
@@ -16,6 +15,7 @@ from mikecore.DfsuFile import DfsuFileType
 from mikecore.eum import eumQuantity
 from mikecore.MeshBuilder import MeshBuilder
 from scipy.spatial import cKDTree
+from shapely import MultiPolygon
 
 from ..eum import EUMType, EUMUnit
 from ..exceptions import OutsideModelDomainError
@@ -23,7 +23,6 @@ from .._interpolation import get_idw_interpolant, interp2d
 from ._FM_utils import (
     _get_node_centered_data,
     _plot_map,
-    BoundaryPolygons,
     Polygon,
     _set_xy_label_by_projection,  # TODO remove
     _to_polygons,  # TODO remove
@@ -114,7 +113,7 @@ class _GeometryFMPlotter:
             node_coordinates=g.node_coordinates,
             element_table=g.element_table,
             element_coordinates=g.element_coordinates,
-            boundary_polylines=g.boundary_polygons.lines,
+            boundary_polygon=g.boundary_polygon,
             plot_type=plot_type,
             projection=g.projection,
             z=None,
@@ -159,10 +158,10 @@ class _GeometryFMPlotter:
 
         linwid = 1.2
         out_col = "0.4"
-        for exterior in self.g.boundary_polygons.exteriors:
-            ax.plot(*exterior.xy.T, color=out_col, linewidth=linwid)
-        for interior in self.g.boundary_polygons.interiors:
-            ax.plot(*interior.xy.T, color=out_col, linewidth=linwid)
+        exterior = self.g.boundary_polygon.exterior
+        ax.plot(*np.array(exterior.coords).T, color=out_col, linewidth=linwid)
+        for interior in self.g.boundary_polygon.interiors:
+            ax.plot(*np.array(interior.coords).T, color=out_col, linewidth=linwid)
         if title is not None:
             ax.set_title(title)
         ax = self._set_plot_limits(ax)
@@ -352,6 +351,11 @@ class _GeometryFM(_Geometry):
     def n_elements(self) -> int:
         """Number of elements."""
         return len(self._element_ids)
+
+    def __len__(self) -> int:
+        "Number of elements."
+        # TODO it can be discussed whether n_elements is the correct length, but most values are defined on elements
+        return self.n_elements
 
     @property
     def element_ids(self) -> np.ndarray:
@@ -604,7 +608,7 @@ class GeometryFM2D(_GeometryFM):
         elif n_nearest > 1:
             weights = get_idw_interpolant(dists, p=p)
             if not extrapolate:
-                weights[~self.contains(xy), :] = np.nan  # type: ignore
+                weights[~self.contains(xy, strategy="shapely"), :] = np.nan  # type: ignore
         else:
             ValueError("n_nearest must be at least 1")
 
@@ -699,7 +703,7 @@ class GeometryFM2D(_GeometryFM):
             if not element_found and self.n_elements > 1:
                 many_nearest, _ = self._find_n_nearest_2d_elements(
                     coords[k, :],
-                    n=min(self.n_elements, 10),  # TODO is 10 enough?
+                    n=min(self.n_elements, 100),  # TODO is 10 enough?
                 )
                 for p in many_nearest[2:]:  # we have already tried the two first above
                     nodes = self.element_table[p]
@@ -711,6 +715,8 @@ class GeometryFM2D(_GeometryFM):
                         break
 
             if not element_found:
+                # make an extra check
+                # if not self.contains(coords[k]):
                 points_outside.append(k)
 
         if len(points_outside) > 0:
@@ -844,24 +850,25 @@ class GeometryFM2D(_GeometryFM):
         return np.abs(area)
 
     @cached_property
-    def boundary_polylines(self) -> BoundaryPolygons:
-        warnings.warn(
-            "boundary_polylines is renamed to boundary_polygons", FutureWarning
-        )
-        return self._get_boundary_polygons()
+    def boundary_polygon(self) -> Polygon:
+        """Domain polygon including potential holes."""
+        return self._get_boundary_polygon()
 
     @cached_property
-    def boundary_polygons(self) -> BoundaryPolygons:
-        """Lists of polygons defining domain outline."""
-        return self._get_boundary_polygons()
+    def _domain(self) -> Any:
+        return self.to_shapely().buffer(0)
 
-    def contains(self, points: np.ndarray) -> np.ndarray:
+    def contains(
+        self, points: np.ndarray, strategy: Literal["loop", "shapely"] = "loop"
+    ) -> np.ndarray:
         """Test if a list of points are contained by mesh.
 
         Parameters
         ----------
         points : array-like n-by-2
             x,y-coordinates of n points to be tested
+        strategy: str
+            Use either 'shapely' or native python 'loop', default is 'loop'.
 
         Returns
         -------
@@ -871,13 +878,29 @@ class GeometryFM2D(_GeometryFM):
         """
         points = np.atleast_2d(points)
 
-        return self.boundary_polygons.contains(points)
+        if strategy == "shapely":
+            from shapely.geometry import Point
+
+            domain = self._domain
+
+            return np.array([domain.contains(Point(p)) for p in points])
+        else:
+            result = np.zeros(points.shape[0], dtype=bool)
+
+            for i, p in enumerate(points):
+                for elem in self.element_table:
+                    coords = self.node_coordinates[elem]
+                    if self._point_in_polygon(coords[:, 0], coords[:, 1], p[0], p[1]):
+                        result[i] = True
+                        break
+
+            return result
 
     def __contains__(self, pt: np.ndarray) -> bool:
         return self.contains(pt)[0]
 
     def _get_boundary_polygons_uncategorized(self) -> list[list[np.int64]]:
-        """Construct closed polygons for all boundary faces."""
+        """Construct polygons for all boundary faces."""
         boundary_faces = self._get_boundary_faces()
         face_remains = boundary_faces.copy()
         polygons = []
@@ -902,23 +925,34 @@ class GeometryFM2D(_GeometryFM):
             polygons.append(polyline)
         return polygons
 
-    def _get_boundary_polygons(self) -> BoundaryPolygons:
-        """Get boundary polylines and categorize as inner or outer by assessing the signed area."""
+    @staticmethod
+    def _signed_area(xy: np.ndarray) -> float:
+        return (
+            np.dot(xy[:, 1], np.roll(xy[:, 0], 1))
+            - np.dot(xy[:, 0], np.roll(xy[:, 1], 1))
+        ) * 0.5
+
+    def _get_boundary_polygon(self) -> Polygon:
         polygons = self._get_boundary_polygons_uncategorized()
 
-        interiors = []
-        exteriors = []
+        shells = []
+        holes = []
 
         for polygon in polygons:
             polygon_np = np.asarray(polygon)
             xy = self.node_coordinates[polygon_np, 0:2]
-            poly = Polygon(xy)
-            if poly.area > 0:
-                exteriors.append(poly)
-            else:
-                interiors.append(poly)
 
-        return BoundaryPolygons(exteriors=exteriors, interiors=interiors)
+            if self._signed_area(xy) > 0:
+                shells.append(xy)
+            else:
+                holes.append(xy)
+
+        if len(shells) > 1:
+            raise NotImplementedError(
+                "Domains with multiple exteriors are not supported"
+            )
+        poly = Polygon(shell=shells[0], holes=holes)
+        return poly
 
     def _get_boundary_faces(self) -> np.ndarray:
         """Construct list of faces."""
@@ -974,8 +1008,8 @@ class GeometryFM2D(_GeometryFM):
 
     def find_index(
         self,
-        x: float | np.ndarray | None = None,
-        y: float | np.ndarray | None = None,
+        x: float | Sequence[float] | np.ndarray | None = None,
+        y: float | Sequence[float] | np.ndarray | None = None,
         coords: np.ndarray | None = None,
         area: (
             tuple[float, float, float, float] | Sequence[tuple[float, float]] | None
@@ -1161,17 +1195,10 @@ class GeometryFM2D(_GeometryFM):
             polygons with mesh elements
 
         """
-        from shapely.geometry import MultiPolygon, Polygon  # type: ignore
+        polygons = [
+            Polygon(self.node_coordinates[nodes, :2]) for nodes in self.element_table
+        ]
 
-        polygons = []
-        for j in range(self.n_elements):
-            nodes = self.element_table[j]
-            pcoords = np.empty([len(nodes), 2])
-            for i in range(len(nodes)):
-                nidx = nodes[i]
-                pcoords[i, :] = self.node_coordinates[nidx, 0:2]
-            polygon = Polygon(pcoords)
-            polygons.append(polygon)
         mp = MultiPolygon(polygons)
 
         return mp
