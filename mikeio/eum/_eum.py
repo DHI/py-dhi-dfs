@@ -716,6 +716,14 @@ class EUMType(IntEnum):
     ThermalConductivity = 110310
     DirectionalVariance = 110311
     SpecificDissipationRate = 110312
+    AngularFrequency = 110313
+    StemDiameter = 110314
+    VegetationDensity = 110315
+    ElasticModulus = 110316
+    BladeWidth = 110317
+    BladeThickness = 110318
+    PlantDensity = 110319
+    Thickness = 110320
 
     def __init__(self, code: int) -> None:
         self.code = code
@@ -1122,6 +1130,7 @@ class EUMUnit(IntEnum):
     psi = 6103
     bar = 6107
     decibar = 6110
+    gigapascal = 6111
     kg_per_meter_pow_2_per_day = 4506
     meter_pow_3_per_mg = 6902
     meter_pow_3_per_mu_g = 6903
@@ -1159,6 +1168,7 @@ class EUMUnit(IntEnum):
     ounce_per_yard_US3 = 2219
     ounce_per_square_feet = 2220
     ounce_per_square_feet_US = 2221
+    gramPerCubicCentimeter = 2222
     kg_per_meter_per_sec = 2300
     Pascal_second = 2301
     kilogram_per_meter_per_day = 2302
@@ -1292,6 +1302,7 @@ class EUMUnit(IntEnum):
     per_acre = 9301
     per_hectare = 9302
     per_km_pow_2 = 9303
+    per_square_feet = 9304
     per_cubic_meter = 9350
     currency_per_meter_pow_3 = 9351
     currency_per_feet_pow_3 = 9352
