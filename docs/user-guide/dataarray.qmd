@@ -170,6 +170,12 @@ da_ratio = da1 / da2
 da_ratio.plot(title="", label="Ratio", vmin=0.8, vmax=1.2, levels=9, cmap="coolwarm")
 ```
 
+## Unit handling
+
+Multiplication and divison of two physical quantities would normally change the unit of the result, but in the case of DataArrays, the type and unit of the result will be the ones of the first operand.
+
+
+
 Other methods that also return a DataArray:
 
 * [`interp_like`](`mikeio.DataArray.interp_like`) - Spatio (temporal) interpolation (see example [Dfsu interpolation](../examples/dfsu/spatial_interpolation.qmd)

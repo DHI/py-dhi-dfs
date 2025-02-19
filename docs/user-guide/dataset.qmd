@@ -166,11 +166,13 @@ including different ways of *selecting* data:
 * ds + value
 * ds - value
 * ds * value
-
-and + and - between two Datasets (if number of items and shapes conform):
+* ds / value
+and between two Datasets (if number of items and shapes conform):
 
 * ds1 + ds2
 * ds1 - ds2
+* ds1 * ds2
+* ds1 / ds2
 
 Other methods that also return a Dataset:
 

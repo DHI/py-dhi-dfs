@@ -1781,33 +1781,31 @@ class DataArray:
         return self.__add__(other)
 
     def __add__(self, other: "DataArray" | float) -> "DataArray":
-        return self._apply_math_operation(other, np.add, txt="+")
+        return self._apply_math_operation(other, np.add)
 
     def __rsub__(self, other: "DataArray" | float) -> "DataArray":
         return other + self.__neg__()
 
     def __sub__(self, other: "DataArray" | float) -> "DataArray":
-        return self._apply_math_operation(other, np.subtract, txt="-")
+        return self._apply_math_operation(other, np.subtract)
 
     def __rmul__(self, other: "DataArray" | float) -> "DataArray":
         return self.__mul__(other)
 
     def __mul__(self, other: "DataArray" | float) -> "DataArray":
-        return self._apply_math_operation(
-            other, np.multiply, txt="x"
-        )  # x in place of *
+        return self._apply_math_operation(other, np.multiply)
 
     def __pow__(self, other: float) -> "DataArray":
-        return self._apply_math_operation(other, np.power, txt="**")
+        return self._apply_math_operation(other, np.power)
 
     def __truediv__(self, other: "DataArray" | float) -> "DataArray":
-        return self._apply_math_operation(other, np.divide, txt="/")
+        return self._apply_math_operation(other, np.divide)
 
     def __floordiv__(self, other: "DataArray" | float) -> "DataArray":
-        return self._apply_math_operation(other, np.floor_divide, txt="//")
+        return self._apply_math_operation(other, np.floor_divide)
 
     def __mod__(self, other: float) -> "DataArray":
-        return self._apply_math_operation(other, np.mod, txt="%")
+        return self._apply_math_operation(other, np.mod)
 
     def __neg__(self) -> "DataArray":
         return self._apply_unary_math_operation(np.negative)
@@ -1830,7 +1828,9 @@ class DataArray:
         return new_da
 
     def _apply_math_operation(
-        self, other: "DataArray" | float, func: Callable, *, txt: str
+        self,
+        other: "DataArray" | float,
+        func: Callable,
     ) -> "DataArray":
         """Apply a binary math operation with a scalar, an array or another DataArray."""
         try:
@@ -1839,38 +1839,10 @@ class DataArray:
         except TypeError:
             raise TypeError("Math operation could not be applied to DataArray")
 
-        # TODO: check if geometry etc match if other is DataArray?
-
         new_da = self.copy()  # TODO: alternatively: create new dataset (will validate)
         new_da.values = data
 
-        if not self._keep_EUM_after_math_operation(other, func):
-            other_name = other.name if hasattr(other, "name") else "array"
-            new_da.item = ItemInfo(
-                f"{self.name} {txt} {other_name}", itemtype=EUMType.Undefined
-            )
-
         return new_da
-
-    def _keep_EUM_after_math_operation(
-        self, other: "DataArray" | float, func: Callable
-    ) -> bool:
-        """Does the math operation falsify the EUM?"""
-        if hasattr(other, "shape") and hasattr(other, "ndim"):
-            # other is array-like, so maybe we cannot keep EUM
-            if func == np.subtract or func == np.sum:
-                # +/-: we may want to keep EUM
-                if isinstance(other, DataArray):
-                    if self.type == other.type and self.unit == other.unit:
-                        return True
-                    else:
-                        return False
-                else:
-                    return True  # assume okay, since no EUM
-            return False
-
-        # other is likely scalar, okay to keep EUM
-        return True
 
     # ============= Logical indexing ===========
 

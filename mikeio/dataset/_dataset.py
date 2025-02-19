@@ -1300,7 +1300,7 @@ class Dataset:
         copy: bool = True,
         keep: Literal["last", "first"] = "last",
     ) -> "Dataset":
-        self._check_all_items_match(other)
+        self._check_n_items(other)
         # assuming time is always first dimension we can skip / keep it by bool
         start_dim = int("time" in self.dims)
         if not np.all(
@@ -1348,25 +1348,19 @@ class Dataset:
             newdata, time=newtime, items=ds.items, geometry=ds.geometry, zn=zn
         )
 
-    def _check_all_items_match(self, other: "Dataset") -> None:
+    def _check_n_items(self, other: "Dataset") -> None:
         if self.n_items != other.n_items:
             raise ValueError(
                 f"Number of items must match ({self.n_items} and {other.n_items})"
             )
 
-        for this, that in zip(self.items, other.items):
-            if this.name != that.name:
-                raise ValueError(
-                    f"Item names must match. Item: {this.name} != {that.name}"
-                )
-            if this.type != that.type:
-                raise ValueError(
-                    f"Item types must match. Item: {this.type} != {that.type}"
-                )
-            if this.unit != that.unit:
-                raise ValueError(
-                    f"Item units must match. Item: {this.unit} != {that.unit}"
-                )
+    def _check_datasets_match(self, other: "Dataset") -> None:
+        self._check_n_items(other)
+
+        if not np.all(self.time == other.time):
+            raise ValueError("All timesteps must match")
+        if self.shape != other.shape:
+            raise ValueError("shape must match")
 
     # ============ aggregate =============
 
@@ -1765,83 +1759,63 @@ class Dataset:
 
     def __add__(self, other: "Dataset" | float) -> "Dataset":
         if isinstance(other, self.__class__):
-            return self._add_dataset(other)
+            return self._binary_op(other, operator="+")
         else:
-            # float-like
-            return self._add_value(other)  # type: ignore
+            return self._scalar_op(other, operator="+")  # type: ignore
 
     def __rsub__(self, other: "Dataset" | float) -> "Dataset":
-        ds = self.__mul__(-1.0)
-        return other + ds
+        ds = self._scalar_op(-1.0, operator="*")
+        return ds._scalar_op(other, operator="+")  # type: ignore
 
     def __sub__(self, other: "Dataset" | float) -> "Dataset":
         if isinstance(other, self.__class__):
-            return self._add_dataset(other, sign=-1.0)
+            return self._binary_op(other, operator="-")
         else:
-            return self._add_value(-other)  # type: ignore
+            return self._scalar_op(-other, operator="+")  # type: ignore
 
     def __rmul__(self, other: "Dataset" | float) -> "Dataset":
         return self.__mul__(other)
 
     def __mul__(self, other: "Dataset" | float) -> "Dataset":
         if isinstance(other, self.__class__):
-            raise ValueError("Multiplication is not possible for two Datasets")
+            return self._binary_op(other, operator="*")
         else:
-            return self._multiply_value(other)  # type: ignore
+            return self._scalar_op(other, operator="*")  # type: ignore
 
-    def _add_dataset(self, other: "Dataset", sign: float = 1.0) -> "Dataset":
+    def __truediv__(self, other: "Dataset" | float) -> "Dataset":
+        if isinstance(other, self.__class__):
+            return self._binary_op(other, operator="/")
+        else:
+            return self._scalar_op(other, operator="/")  # type: ignore
+
+    def _binary_op(self, other: "Dataset", operator: str) -> "Dataset":
+        """Perform binary operation between two Datasets."""
         self._check_datasets_match(other)
-        try:
-            data = [
-                self[x].to_numpy() + sign * other[y].to_numpy()
-                for x, y in zip(self.items, other.items)
-            ]
-        except TypeError:
-            raise TypeError("Could not add data in Dataset")
-        newds = self.copy()
-        for new, old in zip(newds, data):
-            new.values = old
-        return newds
+        if operator == "+":
+            data = [x + y for x, y in zip(self, other)]
+        elif operator == "-":
+            data = [x - y for x, y in zip(self, other)]
+        elif operator == "*":
+            data = [x * y for x, y in zip(self, other)]
+        elif operator == "/":
+            data = [x / y for x, y in zip(self, other)]
+        else:
+            raise ValueError(f"Unsupported operator: {operator}")
+        return Dataset(data)
 
-    def _check_datasets_match(self, other: "Dataset") -> None:
-        self._check_all_items_match(other)
-
-        if not np.all(self.time == other.time):
-            raise ValueError("All timesteps must match")
-        if self.shape != other.shape:
-            raise ValueError("shape must match")
-
-    def _add_value(self, value: float) -> "Dataset":
-        try:
-            data = [value + self[x].to_numpy() for x in self.items]
-        except TypeError:
-            raise TypeError(f"{value} could not be added to Dataset")
-        items = deepcopy(self.items)
-        time = self.time.copy()
-        return Dataset(
-            data,
-            time=time,
-            items=items,
-            geometry=self.geometry,
-            zn=self._zn,
-            validate=False,
-        )
-
-    def _multiply_value(self, value: float) -> "Dataset":
-        try:
-            data = [value * self[x].to_numpy() for x in self.items]
-        except TypeError:
-            raise TypeError(f"{value} could not be multiplied to Dataset")
-        items = deepcopy(self.items)
-        time = self.time.copy()
-        return Dataset(
-            data,
-            time=time,
-            items=items,
-            geometry=self.geometry,
-            zn=self._zn,
-            validate=False,
-        )
+    def _scalar_op(self, value: float, operator: str) -> "Dataset":
+        """Perform operation between Dataset and scalar value."""
+        if operator == "+":
+            data = [x + value for x in self]
+        elif operator == "-":
+            data = [x - value for x in self]
+        elif operator == "*":
+            data = [x * value for x in self]
+        elif operator == "/":
+            data = [x / value for x in self]
+        else:
+            raise ValueError(f"Unsupported operator: {operator}")
+        return Dataset(data)
 
     # ===============================================
 
